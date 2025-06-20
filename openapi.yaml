@@ -1,0 +1,528 @@
+openapi: 3.1.0
+info:
+  title: Codex API
+  description: |
+    Authentication API for the Codex application.
+    
+    Features:
+    - JWT-based authentication with refresh token rotation
+    - Social login (Google, GitHub)
+    - Form-based registration and login
+    - Secure cookie-based refresh tokens
+    
+    ## Authentication
+    
+    The API uses JWT tokens for authentication:
+    - **Access Token**: Short-lived (15 minutes), sent in Authorization header
+    - **Refresh Token**: Long-lived (7 days), stored in httpOnly cookie
+    
+    ### Token Rotation
+    Refresh tokens are rotated on every use for enhanced security.
+    
+  version: '1.0.0'
+  contact:
+    name: Codex API Support
+    email: support@codex.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost/api
+    description: Local development server
+  - url: https://api.codex.dev
+    description: Production server
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns the overall health status of the API and its dependencies
+      operationId: healthCheck
+      responses:
+        '200':
+          description: System is healthy or degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  summary: All systems healthy
+                  value:
+                    status: healthy
+                    timestamp: '2024-01-15T10:30:00Z'
+                    version: '1.0.0'
+                    environment: production
+                    checks:
+                      database:
+                        healthy: true
+                        message: Database connection successful
+                        response_time_ms: 15.23
+                      cache:
+                        healthy: true
+                        message: Cache is working properly
+                        response_time_ms: 2.45
+                      application:
+                        healthy: true
+                        message: Application checks passed
+                degraded:
+                  summary: System degraded
+                  value:
+                    status: degraded
+                    timestamp: '2024-01-15T10:30:00Z'
+                    version: '1.0.0'
+                    environment: production
+                    checks:
+                      database:
+                        healthy: true
+                        message: Database connection successful
+                        response_time_ms: 15.23
+                      cache:
+                        healthy: false
+                        message: Cache functionality failed
+                        error: Connection refused
+                      application:
+                        healthy: true
+                        message: Application checks passed
+        '503':
+          description: System is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ping:
+    get:
+      tags:
+        - Health
+      summary: Simple ping endpoint
+      description: Returns a simple pong response to verify API availability
+      operationId: ping
+      responses:
+        '200':
+          description: Pong response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: pong
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: '2024-01-15T10:30:00Z'
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: Create a new user account with email and password
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          headers:
+            Set-Cookie:
+              description: Refresh token cookie
+              schema:
+                type: string
+                example: refresh_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...; HttpOnly; Secure; SameSite=Lax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate user with email and password
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: Refresh token cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get a new access token using the refresh token from cookies
+      operationId: refreshToken
+      parameters:
+        - name: Cookie
+          in: header
+          description: Refresh token cookie
+          required: true
+          schema:
+            type: string
+            example: refresh_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+      responses:
+        '200':
+          description: Token refreshed successfully
+          headers:
+            Set-Cookie:
+              description: New refresh token cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: Invalidate refresh token and clear cookie
+      operationId: logout
+      parameters:
+        - name: Cookie
+          in: header
+          description: Refresh token cookie
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Logout successful
+          headers:
+            Set-Cookie:
+              description: Cleared refresh token cookie
+              schema:
+                type: string
+                example: refresh_token=; Max-Age=0
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Successfully logged out
+
+  /auth/oauth/{provider}/url:
+    get:
+      tags:
+        - Authentication
+        - OAuth
+      summary: Get OAuth provider URL
+      description: Get the authorization URL for the specified OAuth provider
+      operationId: getOAuthUrl
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          description: OAuth provider name
+          schema:
+            type: string
+            enum: [google, github]
+      responses:
+        '200':
+          description: OAuth URL generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  redirect_url:
+                    type: string
+                    format: uri
+                    example: https://accounts.google.com/oauth/authorize?client_id=...
+        '400':
+          description: Unsupported provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to generate OAuth URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /oauth/{provider}/callback:
+    get:
+      tags:
+        - Authentication
+        - OAuth
+      summary: OAuth callback handler
+      description: Handle OAuth provider callback and authenticate user
+      operationId: handleOAuthCallback
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          description: OAuth provider name
+          schema:
+            type: string
+            enum: [google, github]
+        - name: code
+          in: query
+          required: true
+          description: Authorization code from OAuth provider
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: State parameter for CSRF protection
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OAuth authentication successful
+          headers:
+            Set-Cookie:
+              description: Refresh token cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: OAuth authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /user:
+    get:
+      tags:
+        - User
+      summary: Get current user
+      description: Get the authenticated user's information
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+      required:
+        - id
+        - email
+        - created_at
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          minLength: 8
+          example: "SecurePass123!"
+        password_confirmation:
+          type: string
+          example: "SecurePass123!"
+      required:
+        - email
+        - password
+        - password_confirmation
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          example: "SecurePass123!"
+      required:
+        - email
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token (15 minutes expiry)
+          example: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2F1dGgvbG9naW4iLCJpYXQiOjE2NDIxNjY0MjksImV4cCI6MTY0MjE2NzMyOSwibmJmIjoxNjQyMTY2NDI5LCJqdGkiOiJhYmMxMjMiLCJzdWIiOiIxIiwicHJ2IjoiMjNiZDVjOGRmMTlkNDYyY2E1YThhZTI2Mzk5Y2Q5MmNlMGMwNGJkZiJ9.signature"
+      required:
+        - access_token
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid credentials"
+      required:
+        - error
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Validation failed"
+        messages:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            email: ["The email field is required."]
+            password: ["The password must be at least 8 characters."]
+      required:
+        - error
+        - messages
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        version:
+          type: string
+          example: "1.0.0"
+        environment:
+          type: string
+          example: "production"
+        checks:
+          type: object
+          properties:
+            database:
+              $ref: '#/components/schemas/HealthCheck'
+            cache:
+              $ref: '#/components/schemas/HealthCheck'
+            application:
+              $ref: '#/components/schemas/HealthCheck'
+      required:
+        - status
+        - timestamp
+        - checks
+
+    HealthCheck:
+      type: object
+      properties:
+        healthy:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Database connection successful"
+        response_time_ms:
+          type: number
+          format: float
+          example: 15.23
+        error:
+          type: string
+          example: "Connection failed"
+        details:
+          type: object
+          description: Additional health check details
+      required:
+        - healthy
+        - message
+
+tags:
+  - name: Health
+    description: Health check and monitoring endpoints
+  - name: Authentication
+    description: User authentication and session management
+  - name: OAuth
+    description: Social login with OAuth providers
+  - name: User
+    description: User profile and account management 
