@@ -22,7 +22,7 @@ class AuthController extends Controller
     {
         $user = User::create([
             'email' => $request->email,
-            'password' => $request->password,
+            'password' => Hash::make($request->password),
         ]);
 
         $tokens = $this->generateTokenPair($user, $request);
