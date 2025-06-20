@@ -110,9 +110,7 @@ jobs:
       run: ./vendor/bin/pint --test
 
     - name: Run PHPStan (Static Analysis)
-      run: |
-        composer require --dev phpstan/phpstan larastan/larastan --no-interaction
-        ./vendor/bin/phpstan analyse --memory-limit=2G
+      run: ./vendor/bin/phpstan analyse --memory-limit=2G
 
   security:
     runs-on: ubuntu-latest
