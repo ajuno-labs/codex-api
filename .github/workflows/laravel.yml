@@ -2,9 +2,9 @@ name: Laravel CI
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
 
 jobs:
   test:
@@ -15,14 +15,14 @@ jobs:
         php-version: [8.2, 8.3]
     
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: postgres:15
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: laravel_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: laravel_test
         ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+          - 5432:5432
+        options: --health-cmd="pg_isready -U postgres" --health-interval=10s --health-timeout=5s --health-retries=3
 
     steps:
     - uses: actions/checkout@v4
@@ -31,65 +31,54 @@ jobs:
       uses: shivammathur/setup-php@v2
       with:
         php-version: ${{ matrix.php-version }}
-        extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo, mysql, pdo_mysql
+        extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo, pgsql, pdo_pgsql
         coverage: xdebug
 
     - name: Cache Composer dependencies
       uses: actions/cache@v4
       with:
-        path: api/vendor
+        path: vendor
         key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
         restore-keys: |
           ${{ runner.os }}-composer-
 
     - name: Install Composer dependencies
-      run: |
-        cd api
-        composer install --no-progress --prefer-dist --optimize-autoloader
+      run: composer install --no-progress --prefer-dist --optimize-autoloader
 
     - name: Copy environment file
-      run: |
-        cd api
-        cp .env.example .env.testing
+      run: cp .env.example .env.testing
 
     - name: Generate application key
-      run: |
-        cd api
-        php artisan key:generate --env=testing
+      run: php artisan key:generate --env=testing
 
     - name: Set up test environment
       run: |
-        cd api
-        echo "DB_CONNECTION=mysql" >> .env.testing
+        echo "DB_CONNECTION=pgsql" >> .env.testing
         echo "DB_HOST=127.0.0.1" >> .env.testing
-        echo "DB_PORT=3306" >> .env.testing
+        echo "DB_PORT=5432" >> .env.testing
         echo "DB_DATABASE=laravel_test" >> .env.testing
-        echo "DB_USERNAME=root" >> .env.testing
-        echo "DB_PASSWORD=root" >> .env.testing
+        echo "DB_USERNAME=postgres" >> .env.testing
+        echo "DB_PASSWORD=postgres" >> .env.testing
         echo "CACHE_DRIVER=array" >> .env.testing
         echo "QUEUE_CONNECTION=sync" >> .env.testing
         echo "SESSION_DRIVER=array" >> .env.testing
 
-    - name: Wait for MySQL
+    - name: Wait for PostgreSQL
       run: |
-        while ! mysqladmin ping -h"127.0.0.1" -P3306 -uroot -proot --silent; do
+        until pg_isready -h 127.0.0.1 -p 5432 -U postgres; do
           sleep 1
         done
 
     - name: Run database migrations
-      run: |
-        cd api
-        php artisan migrate --env=testing --force
+      run: php artisan migrate --env=testing --force
 
     - name: Run PHPUnit tests
-      run: |
-        cd api
-        php artisan test --env=testing --coverage-clover=coverage.xml
+      run: php artisan test --env=testing --coverage-clover=coverage.xml
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: api/coverage.xml
+        file: coverage.xml
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
@@ -109,24 +98,19 @@ jobs:
     - name: Cache Composer dependencies
       uses: actions/cache@v4
       with:
-        path: api/vendor
+        path: vendor
         key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
         restore-keys: |
           ${{ runner.os }}-composer-
 
     - name: Install Composer dependencies
-      run: |
-        cd api
-        composer install --no-progress --prefer-dist --optimize-autoloader
+      run: composer install --no-progress --prefer-dist --optimize-autoloader
 
     - name: Run Laravel Pint (Code Style)
-      run: |
-        cd api
-        ./vendor/bin/pint --test
+      run: ./vendor/bin/pint --test
 
     - name: Run PHPStan (Static Analysis)
       run: |
-        cd api
         composer require --dev phpstan/phpstan larastan/larastan --no-interaction
         ./vendor/bin/phpstan analyse --memory-limit=2G
 
@@ -142,11 +126,7 @@ jobs:
         php-version: 8.2
 
     - name: Install Composer dependencies
-      run: |
-        cd api
-        composer install --no-progress --prefer-dist --optimize-autoloader
+      run: composer install --no-progress --prefer-dist --optimize-autoloader
 
     - name: Run security audit
-      run: |
-        cd api
-        composer audit 
+      run: composer audit 
