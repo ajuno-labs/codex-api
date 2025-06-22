@@ -8,6 +8,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class AuthResource extends JsonResource
 {
     protected $token;
+
     protected $message;
 
     public function __construct($resource, $token = null, $message = null)
