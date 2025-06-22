@@ -1,0 +1,302 @@
+openapi: 3.1.1
+info:
+  title: Codex API
+  description: |
+    Codex API
+    
+    ## Authentication Flow
+    1. Register a new user or login with existing credentials
+    2. Use the returned token in the `Authorization: Bearer {token}` header
+    3. Access protected endpoints with the bearer token
+    4. Logout to revoke the current token
+    
+  version: 1.0.0
+  contact:
+    name: Support
+    email: giolynx104@gmail.com
+
+servers:
+  - url: http://localhost
+    description: Local development server
+  - url: https://api.example.com
+    description: Production server
+
+paths:
+  /api/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account and return authentication token
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              name: "John Doe"
+              email: "john@example.com"
+              password: "password123"
+              password_confirmation: "password123"
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                message: "User registered successfully"
+                user:
+                  id: 1
+                  name: "John Doe"
+                  email: "john@example.com"
+                  email_verified_at: null
+                  created_at: "2024-01-01 12:00:00"
+                  updated_at: "2024-01-01 12:00:00"
+                token: "1|abc123def456ghi789..."
+        '422':
+          description: Validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: "The given data was invalid."
+                errors:
+                  email: ["This email is already registered"]
+                  password: ["Password must be at least 8 characters"]
+
+  /api/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticate user and return authentication token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "john@example.com"
+              password: "password123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                message: "Login successful"
+                user:
+                  id: 1
+                  name: "John Doe"
+                  email: "john@example.com"
+                  email_verified_at: null
+                  created_at: "2024-01-01 12:00:00"
+                  updated_at: "2024-01-01 12:00:00"
+                token: "2|xyz789abc456def123..."
+        '422':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: "The given data was invalid."
+                errors:
+                  email: ["The provided credentials are incorrect."]
+
+  /api/user:
+    get:
+      tags:
+        - User
+      summary: Get authenticated user
+      description: Retrieve the currently authenticated user's information
+      operationId: getUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 1
+                name: "John Doe"
+                email: "john@example.com"
+                email_verified_at: null
+                created_at: "2024-01-01 12:00:00"
+                updated_at: "2024-01-01 12:00:00"
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthenticatedError'
+
+  /api/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: Revoke the current authentication token
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Logged out successfully (no content)
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthenticatedError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Enter the token with the `Bearer ` prefix, e.g. "Bearer 1|abc123def456ghi789".
+        
+        You can get a token by calling the login or register endpoints.
+        Note: This API uses Laravel Sanctum tokens, not JWT tokens.
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+        - password_confirmation
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: User's full name
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User's email address (must be unique)
+          example: "john@example.com"
+        password:
+          type: string
+          minLength: 8
+          format: password
+          description: User's password (minimum 8 characters)
+          example: "password123"
+        password_confirmation:
+          type: string
+          format: password
+          description: Password confirmation (must match password)
+          example: "password123"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "john@example.com"
+        password:
+          type: string
+          format: password
+          description: User's password
+          example: "password123"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User's unique identifier
+          example: 1
+        name:
+          type: string
+          description: User's full name
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "john@example.com"
+        email_verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Email verification timestamp
+          example: "2024-01-01 12:00:00"
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: "2024-01-01 12:00:00"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-01 12:00:00"
+
+    AuthResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Login successful"
+        user:
+          $ref: '#/components/schemas/User'
+        token:
+          type: string
+          description: Bearer token for authentication
+          example: "1|abc123def456ghi789..."
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message
+          example: "The given data was invalid."
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Field-specific validation errors
+          example:
+            email: ["The email field is required."]
+            password: ["The password must be at least 8 characters."]
+
+    UnauthenticatedError:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Authentication error message
+          example: "Unauthenticated."
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints (register, login, logout)
+  - name: User
+    description: User profile and information endpoints 
