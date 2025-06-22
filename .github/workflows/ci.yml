@@ -56,11 +56,6 @@ jobs:
     - name: Directory Permissions
       run: chmod -R 777 storage bootstrap/cache
 
-    - name: Create Database
-      run: |
-        mkdir -p database
-        touch database/database.sqlite
-
     - name: Run Database Migrations
       env:
         DB_CONNECTION: pgsql
